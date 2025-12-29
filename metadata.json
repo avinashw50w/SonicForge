@@ -1,0 +1,5 @@
+{
+  "name": "LoopGenius",
+  "description": "AI-powered audio loop extractor and song builder using Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,31 @@
+{
+  "name": "sonic-forge",
+  "version": "1.0.0",
+  "description": "Professional audio processing suite featuring loop extraction, editing, mixing, and video conversion.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "concurrently \"vite\" \"nodemon server/index.js\"",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "fluent-ffmpeg": "^2.1.2",
+    "lucide-react": "^0.562.0",
+    "multer": "^1.4.5-lts.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tone": "^15.1.22"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.3",
+    "typescript": "^5.0.0",
+    "vite": "^4.0.0"
+  }
+}
