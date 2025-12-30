@@ -1,3 +1,4 @@
+
 const ffmpeg = require('fluent-ffmpeg');
 const path = require('path');
 const fs = require('fs');
@@ -25,7 +26,7 @@ const extractAudio = (inputPath) => {
 };
 
 /**
- * Processes a single audio file with filters (Trim, EQ, Speed, Pitch, Vol, Fade, Reverse, 8D, Reverb)
+ * Processes a single audio file with filters (Trim, EQ, Speed, Pitch, Vol, Fade, Reverse, 8D, Reverb, Enhance)
  */
 const processAudio = (inputPath, config) => {
   return new Promise((resolve, reject) => {
@@ -41,7 +42,7 @@ const processAudio = (inputPath, config) => {
       audioFilters.push('asetpts=PTS-STARTPTS');
     }
 
-    // 2. Reverse (Must be early in chain if we want to trim the reversed part? No, usually trim then reverse)
+    // 2. Reverse
     if (config.reverse) {
       audioFilters.push('areverse');
     }
@@ -72,7 +73,6 @@ const processAudio = (inputPath, config) => {
       if (config.fade.in > 0) {
         audioFilters.push(`afade=t=in:ss=0:d=${config.fade.in}`);
       }
-      // Fade out is tricky without duration, skipping for now to ensure stability
     }
 
     // 6. Pitch and Speed
@@ -80,11 +80,14 @@ const processAudio = (inputPath, config) => {
     let pitch = config.pitch || 1.0;
     
     if (pitch !== 1.0 || speed !== 1.0) {
-      audioFilters.push(`asetrate=44100*${pitch}`);
+      // Calculate rate in JS to avoid FFmpeg parsing issues
+      const targetRate = Math.round(44100 * pitch);
+      audioFilters.push(`asetrate=${targetRate}`);
       
       const tempoFilter = (1 / pitch) * speed;
       
       let remainingTempo = tempoFilter;
+      // atempo range is 0.5 to 2.0 (technically 100 now, but keeping safe chaining)
       while (remainingTempo > 2.0) {
         audioFilters.push(`atempo=2.0`);
         remainingTempo /= 2.0;
@@ -93,26 +96,44 @@ const processAudio = (inputPath, config) => {
         audioFilters.push(`atempo=0.5`);
         remainingTempo /= 0.5;
       }
-      audioFilters.push(`atempo=${remainingTempo}`);
+      // Only push if there's a significant difference from 1.0
+      if (Math.abs(remainingTempo - 1.0) > 0.01) {
+          audioFilters.push(`atempo=${remainingTempo}`);
+      }
+      
+      // Resample back to standard 44.1k to ensure compatibility after asetrate
+      audioFilters.push('aresample=44100');
     }
 
     // 7. Special Effects
     
     // 8D Audio (Auto-pan)
-    // apulsator: mode=sine, frequency=0.125Hz (8 seconds per cycle), amount=1 (full pan)
     if (config.spatial8d) {
        audioFilters.push('apulsator=mode=sine:hz=0.125:amount=1');
     }
 
     // Reverb / Echo
-    // Simple echo: in_gain, out_gain, delays, decays
     if (config.reverb) {
-       // A generic "Stadium" style echo/reverb
        audioFilters.push('aecho=0.8:0.9:1000:0.3');
     }
 
+    // Audio Enhancer (Dynamic Audio Normalizer + Clarity)
+    if (config.enhanced) {
+      // Clean up low mud
+      audioFilters.push('highpass=f=80');
+      // Subtle sparkle
+      audioFilters.push('highshelf=g=2:f=8000'); 
+      // Multi-band compressor simulation via acompressor
+      // threshold -18dB, ratio 3:1, makeup gain included via output volume boost logic implicitly in dynaudnorm usually, 
+      // but let's compress first.
+      audioFilters.push('acompressor=threshold=-18dB:ratio=3:attack=10:release=100');
+      // Final loudness normalization to make it "pop"
+      audioFilters.push('dynaudnorm=f=150:g=15:p=0.9');
+    }
+
     if (audioFilters.length > 0) {
-      command.complexFilter(audioFilters);
+      // Use .audioFilters() instead of .complexFilter() for single stream chain
+      command.audioFilters(audioFilters);
     }
 
     command
@@ -137,7 +158,7 @@ const processMulti = (filePaths, operation) => {
       // Concatenate
       command.on('error', reject)
         .on('end', () => resolve(outputPath))
-        .mergeToFile(outputPath, path.join(__dirname, '../uploads/temp/')); // fluent-ffmpeg handles concat magic
+        .mergeToFile(outputPath, path.join(__dirname, '../uploads/temp/')); 
     } else {
       // Mix (Overlay)
       command.complexFilter([

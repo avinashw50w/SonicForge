@@ -1,3 +1,4 @@
+
 import * as Tone from 'tone';
 
 // Constant for smooth parameter transitions (in seconds)
@@ -20,6 +21,8 @@ export class AudioEngine {
   private reverbGain: GainNode;
   private preMasterSum: GainNode; // Sums dry + wet before panning
   private pannerNode: StereoPannerNode; // For 8D effect
+  private compressorNode: DynamicsCompressorNode; // For Enhancer
+  private enhancerGain: GainNode; // Makeup gain for enhancer
   private masterGain: GainNode;
 
   // 8D Oscillator
@@ -70,9 +73,15 @@ export class AudioEngine {
     this.reverbGain.gain.value = 0;
     this.loadImpulseResponse();
 
-    // Summing & Panner
+    // Summing & Panner & Dynamics
     this.preMasterSum = this.audioContext.createGain();
     this.pannerNode = this.audioContext.createStereoPanner();
+    this.compressorNode = this.audioContext.createDynamicsCompressor();
+    this.enhancerGain = this.audioContext.createGain();
+
+    // Default Compressor to bypass (essentially)
+    this.compressorNode.threshold.value = -100;
+    this.compressorNode.ratio.value = 1;
 
     // Master
     this.masterGain = this.audioContext.createGain();
@@ -91,9 +100,11 @@ export class AudioEngine {
     this.reverbConvolver.connect(this.reverbGain);
     this.reverbGain.connect(this.preMasterSum);
 
-    // 4. Sum -> Panner -> Master -> Dest
+    // 4. Sum -> Panner -> Compressor -> EnhancerGain -> Master -> Dest
     this.preMasterSum.connect(this.pannerNode);
-    this.pannerNode.connect(this.masterGain);
+    this.pannerNode.connect(this.compressorNode);
+    this.compressorNode.connect(this.enhancerGain);
+    this.enhancerGain.connect(this.masterGain);
     this.masterGain.connect(this.audioContext.destination);
   }
 
@@ -230,6 +241,26 @@ export class AudioEngine {
           // Reset Pan to center smoothly
           this.pannerNode.pan.setTargetAtTime(0, this.audioContext.currentTime, 0.2);
       }
+  }
+
+  setEnhanced(active: boolean) {
+    const t = this.audioContext.currentTime;
+    if (active) {
+        // Apply "Punchy" Compression settings
+        this.compressorNode.threshold.setTargetAtTime(-24, t, RAMP_TIME);
+        this.compressorNode.knee.setTargetAtTime(30, t, RAMP_TIME);
+        this.compressorNode.ratio.setTargetAtTime(12, t, RAMP_TIME);
+        this.compressorNode.attack.setTargetAtTime(0.003, t, RAMP_TIME);
+        this.compressorNode.release.setTargetAtTime(0.25, t, RAMP_TIME);
+        
+        // Apply Makeup Gain (~+3dB) to compensate for compression and add loudness
+        this.enhancerGain.gain.setTargetAtTime(1.4, t, RAMP_TIME);
+    } else {
+        // Bypass settings
+        this.compressorNode.threshold.setTargetAtTime(-100, t, RAMP_TIME);
+        this.compressorNode.ratio.setTargetAtTime(1, t, RAMP_TIME);
+        this.enhancerGain.gain.setTargetAtTime(1, t, RAMP_TIME);
+    }
   }
 
   private updatePlayerParams() {

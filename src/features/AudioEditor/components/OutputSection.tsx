@@ -1,14 +1,23 @@
 import React from 'react';
 import { Button } from '../../../components/Button';
 import { Zap, Music, Download, Infinity } from 'lucide-react';
+import { downloadFile } from '../../../services/apiService';
 
 interface OutputSectionProps {
   isProcessing: boolean;
   processedUrl: string | null;
   onProcess: () => void;
+  originalFilename?: string;
 }
 
-export const OutputSection: React.FC<OutputSectionProps> = ({ isProcessing, processedUrl, onProcess }) => {
+const OutputSection: React.FC<OutputSectionProps> = ({ isProcessing, processedUrl, onProcess, originalFilename }) => {
+  const getDownloadName = () => {
+    if (!originalFilename) return 'remix.mp3';
+    // Remove extension
+    const base = originalFilename.replace(/\.[^/.]+$/, "");
+    return `${base}_remix.mp3`;
+  };
+
   return (
     <div className="lg:col-span-4 flex flex-col gap-6">
       <Button 
@@ -31,11 +40,13 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ isProcessing, proc
             
             <audio controls src={processedUrl} className="w-full mt-4" />
             
-            <a href={processedUrl} download="remix.mp3" className="block w-full mt-4">
-              <Button variant="secondary" className="w-full">
-                <Download className="w-4 h-4" /> Download MP3
-              </Button>
-            </a>
+            <Button 
+                variant="secondary" 
+                className="w-full mt-4"
+                onClick={() => downloadFile(processedUrl, getDownloadName())}
+            >
+              <Download className="w-4 h-4" /> Download MP3
+            </Button>
           </div>
         ) : (
           <div className="text-center text-slate-600">
@@ -47,3 +58,5 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ isProcessing, proc
     </div>
   );
 };
+
+export default OutputSection;

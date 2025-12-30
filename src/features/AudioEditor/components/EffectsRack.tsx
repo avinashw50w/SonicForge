@@ -1,20 +1,23 @@
+
 import React from 'react';
-import { Zap, RotateCcw, Headphones, Wind, LucideIcon } from 'lucide-react';
+import { Zap, RotateCcw, Headphones, Wind, LucideIcon, Sparkles } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 
 interface EffectsRackProps {
   reverse: boolean;
   spatial8d: boolean;
   reverb: boolean;
+  enhanced: boolean;
   onReverseChange: () => void;
   onSpatial8dChange: () => void;
   onReverbChange: () => void;
+  onEnhancedChange: () => void;
   onReset: () => void;
 }
 
 export const EffectsRack: React.FC<EffectsRackProps> = ({
-  reverse, spatial8d, reverb,
-  onReverseChange, onSpatial8dChange, onReverbChange, onReset
+  reverse, spatial8d, reverb, enhanced,
+  onReverseChange, onSpatial8dChange, onReverbChange, onEnhancedChange, onReset
 }) => {
   const Toggle = ({ label, active, onClick, icon: Icon }: { label: string; active: boolean; onClick: () => void; icon: LucideIcon }) => (
     <button 
@@ -36,7 +39,7 @@ export const EffectsRack: React.FC<EffectsRackProps> = ({
   return (
     <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 md:col-span-2">
       <SectionHeader title="FX Processors" icon={Zap} onReset={onReset} />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Toggle 
           label="Reverse Audio" 
           active={reverse} 
@@ -54,6 +57,12 @@ export const EffectsRack: React.FC<EffectsRackProps> = ({
           active={reverb} 
           onClick={onReverbChange} 
           icon={Wind}
+        />
+        <Toggle 
+          label="AI Enhancer" 
+          active={enhanced} 
+          onClick={onEnhancedChange} 
+          icon={Sparkles}
         />
       </div>
     </div>

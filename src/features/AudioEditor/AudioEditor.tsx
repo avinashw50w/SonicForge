@@ -9,7 +9,7 @@ import { PresetSelector } from './components/PresetSelector';
 import { TimePitchControls } from './components/TimePitchControls';
 import { EqualizerControls } from './components/EqualizerControls';
 import { EffectsRack } from './components/EffectsRack';
-import { OutputSection } from './components/OutputSection';
+import OutputSection from './components/OutputSection';
 
 const AudioEditor: React.FC = () => {
   // --- State ---
@@ -52,6 +52,7 @@ const AudioEditor: React.FC = () => {
   const [reverse, setReverse] = useState(false);
   const [spatial8d, setSpatial8d] = useState(false);
   const [reverb, setReverb] = useState(false);
+  const [enhanced, setEnhanced] = useState(false);
 
   // EQ
   const [eqBass, setEqBass] = useState(0);
@@ -94,6 +95,12 @@ const AudioEditor: React.FC = () => {
      const engine = getAudioEngine();
      engine.setSpatial8d(spatial8d);
   }, [spatial8d, getAudioEngine]);
+
+  // Enhancer Effect
+  useEffect(() => {
+     const engine = getAudioEngine();
+     engine.setEnhanced(enhanced);
+  }, [enhanced, getAudioEngine]);
 
   // --- Lifecycle Cleanup ---
   useEffect(() => {
@@ -240,6 +247,7 @@ const AudioEditor: React.FC = () => {
       setReverse(false);
       setSpatial8d(false);
       setReverb(false);
+      setEnhanced(false);
   };
 
   const applyPreset = (type: string) => {
@@ -314,7 +322,8 @@ const AudioEditor: React.FC = () => {
         eq: { bass: eqBass, mid: eqMid, treble: eqTreble },
         reverse,
         spatial8d,
-        reverb
+        reverb,
+        enhanced
       };
 
       const result = await processAudio(file, config);
@@ -414,9 +423,11 @@ const AudioEditor: React.FC = () => {
               reverse={reverse}
               spatial8d={spatial8d}
               reverb={reverb}
+              enhanced={enhanced}
               onReverseChange={() => handleUpdate(setReverse)(!reverse)}
               onSpatial8dChange={() => handleUpdate(setSpatial8d)(!spatial8d)}
               onReverbChange={() => handleUpdate(setReverb)(!reverb)}
+              onEnhancedChange={() => handleUpdate(setEnhanced)(!enhanced)}
               onReset={resetFX}
             />
 
@@ -427,6 +438,7 @@ const AudioEditor: React.FC = () => {
           isProcessing={isProcessing}
           processedUrl={processedUrl}
           onProcess={handleProcess}
+          originalFilename={file.name}
         />
 
     </div>
