@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { processAudio, getFullUrl } from '../../services/apiService';
 import { AudioEngine } from '../../services/audioService';
@@ -31,8 +32,11 @@ const AudioEditor: React.FC = () => {
 
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  // Ref to track current time without triggering re-renders, preventing stale closure issues in scrub handlers
+  
+  // Refs to track state synchronously for the animation loop
   const currentTimeRef = useRef(0);
+  const isPlayingRef = useRef(false);
+  const isScrubbingRef = useRef(false);
   
   const [isScrubbing, setIsScrubbing] = useState(false);
   const requestRef = useRef<number>(null);
@@ -90,13 +94,11 @@ const AudioEditor: React.FC = () => {
      engine.setReverse(reverse);
   }, [reverse, getAudioEngine]);
 
-  // Spatial 8D Effect
   useEffect(() => {
      const engine = getAudioEngine();
      engine.setSpatial8d(spatial8d);
   }, [spatial8d, getAudioEngine]);
 
-  // Enhancer Effect
   useEffect(() => {
      const engine = getAudioEngine();
      engine.setEnhanced(enhanced);
@@ -113,21 +115,30 @@ const AudioEditor: React.FC = () => {
     };
   }, []);
 
-  const updateTime = () => {
-    if (isScrubbing) {
-        requestRef.current = requestAnimationFrame(updateTime);
+  // Sync refs with state for UI consistency, though logic relies on refs
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { isScrubbingRef.current = isScrubbing; }, [isScrubbing]);
+
+  const updateTime = useCallback(() => {
+    // If scrubbing, we skip updating time from engine so we don't fight the user's drag
+    if (isScrubbingRef.current) {
+        if (isPlayingRef.current) {
+             requestRef.current = requestAnimationFrame(updateTime);
+        }
         return;
     }
-    const engine = getAudioEngine();
-    
-    // Prevent updating time if we have stopped playing (but state update hasn't propagated or this frame was queued)
-    if (isPlaying) {
+
+    if (isPlayingRef.current) {
+      const engine = getAudioEngine();
+      // Important: Check if engine is actually running to avoid getting 0
+      // when we might have just stopped but the loop fired one last time.
       const t = engine.getCurrentTime();
+      
       setCurrentTime(t);
       currentTimeRef.current = t;
       requestRef.current = requestAnimationFrame(updateTime);
     }
-  };
+  }, [getAudioEngine]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -135,7 +146,7 @@ const AudioEditor: React.FC = () => {
     } else {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     }
-  }, [isPlaying, isScrubbing]); 
+  }, [isPlaying, updateTime]); 
 
   // --- Handlers ---
 
@@ -145,6 +156,7 @@ const AudioEditor: React.FC = () => {
       setFile(f);
       setProcessedUrl(null);
       setIsPlaying(false);
+      isPlayingRef.current = false;
       setActivePreset(null);
       
       const engine = getAudioEngine();
@@ -167,14 +179,16 @@ const AudioEditor: React.FC = () => {
   const togglePlayback = async () => {
     const engine = getAudioEngine();
     
-    // Ensure engine has buffer if it was recreated (e.g. strict mode cleanup)
     if (!engine.getAudioBuffer() && audioBuffer) {
         engine.setAudioBuffer(audioBuffer);
     }
 
     if (isPlaying) {
-      // PAUSE: Capture exact time before stopping to resume correctly later
+      // PAUSE
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      
+      // Update ref immediately to prevent loop from running if it was queued
+      isPlayingRef.current = false;
       
       const pauseTime = engine.getCurrentTime();
       currentTimeRef.current = pauseTime;
@@ -186,12 +200,22 @@ const AudioEditor: React.FC = () => {
       // PLAY
       if (!audioBuffer) return;
       
+      isPlayingRef.current = true;
       let startPos = currentTimeRef.current; 
+      
       // Ensure start position is within current trim bounds
       if (startPos < trimStart || startPos >= trimEnd) {
           startPos = trimStart;
       }
+      // If we are at the very end, restart
+      if (startPos >= trimEnd - 0.1) {
+          startPos = trimStart;
+      }
       
+      // Set current time before playing to ensure UI is synced
+      setCurrentTime(startPos);
+      currentTimeRef.current = startPos;
+
       await engine.playLoop(trimStart, trimEnd, startPos);
       setIsPlaying(true);
     }
@@ -201,8 +225,8 @@ const AudioEditor: React.FC = () => {
     setCurrentTime(t);
     currentTimeRef.current = t;
     
-    // Only seek audio engine if we are NOT scrubbing (click to jump)
-    if (isPlaying && !isScrubbing) {
+    // Check REF instead of state to avoid closure staleness issues
+    if (isPlayingRef.current && !isScrubbingRef.current) {
         const engine = getAudioEngine();
         if (!engine.getAudioBuffer() && audioBuffer) engine.setAudioBuffer(audioBuffer);
         engine.playLoop(trimStart, trimEnd, t);
@@ -210,16 +234,18 @@ const AudioEditor: React.FC = () => {
   };
 
   const handleScrubStart = () => {
+    isScrubbingRef.current = true;
     setIsScrubbing(true);
   };
 
   const handleScrubEnd = () => {
+    isScrubbingRef.current = false;
     setIsScrubbing(false);
-    // Resume playback at new position if it was playing.
-    // We use currentTimeRef.current to get the latest position set by handleSeek during the drag.
-    if (isPlaying) {
+    
+    if (isPlayingRef.current) {
         const engine = getAudioEngine();
         if (!engine.getAudioBuffer() && audioBuffer) engine.setAudioBuffer(audioBuffer);
+        // Use ref for most up-to-date time
         engine.playLoop(trimStart, trimEnd, currentTimeRef.current);
     }
   };
@@ -251,7 +277,6 @@ const AudioEditor: React.FC = () => {
   };
 
   const applyPreset = (type: string) => {
-    // If clicking the active preset, toggle it off (reset)
     if (activePreset === type) {
         resetAll();
         setActivePreset(null);
@@ -311,6 +336,7 @@ const AudioEditor: React.FC = () => {
     setProcessedUrl(null);
     getAudioEngine().stop();
     setIsPlaying(false);
+    isPlayingRef.current = false;
 
     try {
       const config = {
@@ -335,13 +361,11 @@ const AudioEditor: React.FC = () => {
     }
   };
 
-  // --- Handlers for component interaction ---
   const handleUpdate = (setter: React.Dispatch<React.SetStateAction<any>>) => (val: any) => {
     setter(val);
-    if (activePreset) setActivePreset(null); // Deselect preset on manual adjustment
+    if (activePreset) setActivePreset(null); 
   };
 
-  // If no file, Render just the Header (which handles upload UI)
   if (!file) {
     return (
       <EditorHeader 
@@ -376,12 +400,10 @@ const AudioEditor: React.FC = () => {
           onScrubStart={handleScrubStart}
           onScrubEnd={handleScrubEnd}
           onTrimStartChange={(v) => {
-              // Prevent Start from passing End
               const val = Math.max(0, Math.min(v, trimEnd - 0.1));
               setTrimStart(val);
           }}
           onTrimEndChange={(v) => {
-              // Prevent End from passing Start
               const val = Math.min(duration, Math.max(v, trimStart + 0.1));
               setTrimEnd(val);
           }}

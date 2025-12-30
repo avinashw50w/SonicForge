@@ -2,7 +2,8 @@
 import * as Tone from 'tone';
 
 // Constant for smooth parameter transitions (in seconds)
-const RAMP_TIME = 0.2;
+// Reduced to 0.1 for snappier response while maintaining smoothness
+const RAMP_TIME = 0.1;
 
 export class AudioEngine {
   private audioContext: AudioContext;
@@ -178,7 +179,6 @@ export class AudioEngine {
 
   setVolume(v: number) {
       this._volume = v;
-      // Use RAMP_TIME for smoother volume changes
       this.masterGain.gain.setTargetAtTime(v, this.audioContext.currentTime, RAMP_TIME);
   }
 
@@ -194,7 +194,6 @@ export class AudioEngine {
 
   setEQ(bass: number, mid: number, treble: number) {
       this._eq = { bass, mid, treble };
-      // Use RAMP_TIME for smooth EQ sweeps
       this.eqLow.gain.setTargetAtTime(bass, this.audioContext.currentTime, RAMP_TIME);
       this.eqMid.gain.setTargetAtTime(mid, this.audioContext.currentTime, RAMP_TIME);
       this.eqHigh.gain.setTargetAtTime(treble, this.audioContext.currentTime, RAMP_TIME);
@@ -266,12 +265,10 @@ export class AudioEngine {
   private updatePlayerParams() {
       if (this.grainPlayer) {
            // Defensive programming: Check if properties are Signals (objects with .rampTo) or primitives
-           // This handles cases where Tone.js might behave differently in different builds/imports
            
            // PlaybackRate (Speed)
            const pRate = (this.grainPlayer.playbackRate as any);
            if (pRate && typeof pRate === 'object' && typeof pRate.rampTo === 'function') {
-                // Use RAMP_TIME (0.2s) for smooth transitions
                 pRate.rampTo(this._speed, RAMP_TIME);
            } else {
                 (this.grainPlayer as any).playbackRate = this._speed;
@@ -320,7 +317,6 @@ export class AudioEngine {
     if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
     }
-    // Tone.start() is required to unlock AudioContext in some browsers
     if (Tone.context.state === 'suspended') {
         await Tone.start();
     }
@@ -331,7 +327,6 @@ export class AudioEngine {
 
     const bufferToUse = this.isReversed && this.reversedBuffer ? this.reversedBuffer : this.audioBuffer;
     
-    // Explicitly wrap in ToneAudioBuffer for robustness
     const toneBuffer = new Tone.ToneAudioBuffer(bufferToUse);
 
     this.grainPlayer = new Tone.GrainPlayer(toneBuffer);
@@ -355,12 +350,9 @@ export class AudioEngine {
     this.grainPlayer.loopStart = loopStart;
     this.grainPlayer.loopEnd = loopEnd;
     
-    // Connect to Native Audio Graph (Input Gain)
     this.grainPlayer.connect(this.inputGainNode);
     
     // Set Initial Parameters
-    // Check if params are Signals (have .value) or primitives
-    
     // Speed
     const pRate = (this.grainPlayer.playbackRate as any);
     if (pRate && typeof pRate === 'object' && 'value' in pRate) {
@@ -392,7 +384,6 @@ export class AudioEngine {
     // Record Start Time for UI Sync
     this.startTime = this.audioContext.currentTime - (playOffset - loopStart) / (this._speed || 1);
     
-    // Start using Tone.now() to ensure immediate playback in Tone's timeline
     this.grainPlayer.start(Tone.now(), playOffset);
   }
 
