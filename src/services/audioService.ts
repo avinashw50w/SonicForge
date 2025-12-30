@@ -18,7 +18,12 @@ export class AudioEngine {
   private eqHigh: BiquadFilterNode;
   private reverbConvolver: ConvolverNode;
   private reverbGain: GainNode;
+  private preMasterSum: GainNode; // Sums dry + wet before panning
+  private pannerNode: StereoPannerNode; // For 8D effect
   private masterGain: GainNode;
+
+  // 8D Oscillator
+  private autoPanOsc: OscillatorNode | null = null;
 
   // State
   private startTime: number = 0;
@@ -65,20 +70,30 @@ export class AudioEngine {
     this.reverbGain.gain.value = 0;
     this.loadImpulseResponse();
 
+    // Summing & Panner
+    this.preMasterSum = this.audioContext.createGain();
+    this.pannerNode = this.audioContext.createStereoPanner();
+
     // Master
     this.masterGain = this.audioContext.createGain();
 
     // Connect Graph
+    // 1. Input -> EQ Chain
     this.inputGainNode.connect(this.eqLow);
     this.eqLow.connect(this.eqMid);
     this.eqMid.connect(this.eqHigh);
-    this.eqHigh.connect(this.masterGain);
     
-    // Reverb Send
+    // 2. EQ High -> Dry Signal -> Sum
+    this.eqHigh.connect(this.preMasterSum);
+    
+    // 3. EQ High -> Reverb -> Wet Signal -> Sum
     this.eqHigh.connect(this.reverbConvolver);
     this.reverbConvolver.connect(this.reverbGain);
-    this.reverbGain.connect(this.masterGain);
+    this.reverbGain.connect(this.preMasterSum);
 
+    // 4. Sum -> Panner -> Master -> Dest
+    this.preMasterSum.connect(this.pannerNode);
+    this.pannerNode.connect(this.masterGain);
     this.masterGain.connect(this.audioContext.destination);
   }
 
@@ -190,6 +205,33 @@ export class AudioEngine {
       }
   }
 
+  setSpatial8d(active: boolean) {
+      // Cleanup existing oscillator
+      if (this.autoPanOsc) {
+          try {
+              this.autoPanOsc.stop();
+              this.autoPanOsc.disconnect();
+          } catch(e) {
+              // Ignore already stopped
+          }
+          this.autoPanOsc = null;
+      }
+
+      if (active) {
+          // Create 0.1Hz Sine Wave for Panning
+          const t = this.audioContext.currentTime;
+          this.autoPanOsc = this.audioContext.createOscillator();
+          this.autoPanOsc.type = 'sine';
+          this.autoPanOsc.frequency.value = 0.1; // 10 seconds per cycle
+          
+          this.autoPanOsc.connect(this.pannerNode.pan);
+          this.autoPanOsc.start(t);
+      } else {
+          // Reset Pan to center smoothly
+          this.pannerNode.pan.setTargetAtTime(0, this.audioContext.currentTime, 0.2);
+      }
+  }
+
   private updatePlayerParams() {
       if (this.grainPlayer) {
            // Defensive programming: Check if properties are Signals (objects with .rampTo) or primitives
@@ -282,7 +324,7 @@ export class AudioEngine {
     this.grainPlayer.loopStart = loopStart;
     this.grainPlayer.loopEnd = loopEnd;
     
-    // Connect to Native Audio Graph
+    // Connect to Native Audio Graph (Input Gain)
     this.grainPlayer.connect(this.inputGainNode);
     
     // Set Initial Parameters
@@ -334,6 +376,14 @@ export class AudioEngine {
 
   close() {
     this.stop();
+    // Cleanup Oscillator if exists
+    if (this.autoPanOsc) {
+        try {
+            this.autoPanOsc.stop();
+            this.autoPanOsc.disconnect();
+        } catch(e) {}
+        this.autoPanOsc = null;
+    }
   }
   
   async generateRepeatedLoop(start: number, end: number, repetitions: number): Promise<AudioBuffer> {

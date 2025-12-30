@@ -19,7 +19,8 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 font-sans flex overflow-hidden">
+    // Changed min-h-screen to h-screen to strictly fill the viewport
+    <div className="h-screen bg-slate-950 text-slate-50 font-sans flex overflow-hidden">
       
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
@@ -31,10 +32,10 @@ const App: React.FC = () => {
 
       {/* Sidebar Navigation */}
       <aside className={`
-        fixed md:relative z-50 h-full w-72 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out
+        fixed md:relative z-50 h-full w-72 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out shrink-0
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-600 p-2 rounded-lg">
               <Music4 className="w-6 h-6 text-white" />
@@ -81,7 +82,7 @@ const App: React.FC = () => {
           })}
         </nav>
 
-        <div className="p-6 border-t border-slate-800">
+        <div className="p-6 border-t border-slate-800 shrink-0">
            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
               <p className="text-xs text-slate-500 text-center">
                 Powered by DSP & FFMPEG
@@ -91,7 +92,7 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <header className="md:hidden h-16 border-b border-slate-800 flex items-center px-4 justify-between bg-slate-900 shrink-0">
            <div className="flex items-center gap-2">
               <span className="font-semibold text-lg">
@@ -104,7 +105,7 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 scroll-smooth">
-          <div className="max-w-7xl mx-auto pb-20 h-full">
+          <div className="max-w-7xl mx-auto pb-32 h-full">
              
              {/* Views are now hidden via CSS instead of unmounted, preserving state */}
              <div className={activeView === 'loops' ? 'block h-full' : 'hidden'}>

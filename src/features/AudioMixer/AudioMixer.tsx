@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/Button';
-import { processMultiAudio, getFullUrl } from '../../services/apiService';
+import { processMultiAudio, getFullUrl, downloadFile } from '../../services/apiService';
 import { Layers, ListPlus, Music, Download, Trash2 } from 'lucide-react';
 
 const AudioMixer: React.FC = () => {
   const [files, setFiles] = useState<File[]>([]);
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
+  const [resultFilename, setResultFilename] = useState<string>('mix.mp3');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mode, setMode] = useState<'join' | 'mix'>('join');
 
@@ -26,6 +27,7 @@ const AudioMixer: React.FC = () => {
     try {
       const result = await processMultiAudio(files, mode);
       setProcessedUrl(getFullUrl(result.url));
+      setResultFilename(result.filename);
     } catch (err) {
       alert("Processing failed");
     } finally {
@@ -98,11 +100,9 @@ const AudioMixer: React.FC = () => {
                     </div>
                     <h3 className="text-xl font-medium">Mix Complete!</h3>
                     <audio controls src={processedUrl} className="w-full" />
-                    <a href={processedUrl} download className="inline-block">
-                        <Button variant="primary">
-                            <Download className="w-4 h-4" /> Download Result
-                        </Button>
-                    </a>
+                    <Button variant="primary" onClick={() => downloadFile(processedUrl!, resultFilename)}>
+                        <Download className="w-4 h-4" /> Download Result
+                    </Button>
                 </div>
             ) : (
                 <div className="text-slate-500 text-center opacity-50">

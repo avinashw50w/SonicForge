@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '../../components/Button';
-import { extractAudioFromVideo, getFullUrl } from '../../services/apiService';
+import { extractAudioFromVideo, getFullUrl, downloadFile } from '../../services/apiService';
 import { Video, FileAudio, ArrowRight, Download } from 'lucide-react';
 
 const VideoExtractor: React.FC = () => {
@@ -65,11 +65,9 @@ const VideoExtractor: React.FC = () => {
                     <p className="text-slate-300">{result.filename}</p>
                     <audio controls src={result.url} className="w-full max-w-md mx-auto" />
                     <div className="pt-4">
-                        <a href={result.url} download={result.filename}>
-                            <Button variant="primary">
-                                <Download className="w-4 h-4" /> Download MP3
-                            </Button>
-                        </a>
+                        <Button variant="primary" onClick={() => downloadFile(result.url, result.filename)}>
+                            <Download className="w-4 h-4" /> Download MP3
+                        </Button>
                         <button onClick={() => setResult(null)} className="block mx-auto mt-4 text-sm text-slate-500 hover:text-white">
                             Convert Another
                         </button>

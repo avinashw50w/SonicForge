@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { Upload, Music, Play, Pause, Download, Activity, Clock, ListMusic, Star, FileAudio } from 'lucide-react';
 import { analyzeAudioDSP } from '../../services/dspService';
 import { AudioEngine } from '../../services/audioService';
-import { processAudio, getFullUrl } from '../../services/apiService';
+import { processAudio, getFullUrl, downloadFile } from '../../services/apiService';
 import { AnalysisResult, PlaybackState, LoopCategory } from '../../types';
 import Waveform from '../../components/Waveform';
 import { Button } from '../../components/Button';
@@ -24,6 +24,7 @@ const LoopStudio: React.FC = () => {
   
   // Scrubber State
   const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0); // Ref to track time during async operations/closures
   const [isScrubbing, setIsScrubbing] = useState(false);
 
   // Refs
@@ -62,6 +63,7 @@ const LoopStudio: React.FC = () => {
         const engine = getAudioEngine();
         const time = engine.getCurrentTime();
         setCurrentTime(time);
+        currentTimeRef.current = time;
       }
       animationFrameId = requestAnimationFrame(loop);
     };
@@ -98,6 +100,7 @@ const LoopStudio: React.FC = () => {
       setIsGeneratingMp3(false);
       generatedSongBuffer.current = null;
       setCurrentTime(0);
+      currentTimeRef.current = 0;
       setSourceAudioBuffer(null);
 
       setIsDecoding(true); // Start decoding
@@ -139,6 +142,7 @@ const LoopStudio: React.FC = () => {
       if (result.loops.length > 0) {
         setSelectedLoopId(result.loops[0].id);
         setCurrentTime(result.loops[0].start);
+        currentTimeRef.current = result.loops[0].start;
       }
     } catch (error) {
       alert("Failed to analyze audio.");
@@ -165,7 +169,8 @@ const LoopStudio: React.FC = () => {
             engine.setAudioBuffer(sourceAudioBuffer);
         }
 
-        const startPos = currentTime; 
+        // Use ref time for accurate restart
+        const startPos = currentTimeRef.current; 
         engine.playLoop(currentLoop.start, currentLoop.end, startPos);
         setPlaybackState('playing');
       }
@@ -174,7 +179,11 @@ const LoopStudio: React.FC = () => {
 
   const handleSeek = (time: number) => {
     setCurrentTime(time);
-    if (playbackState === 'playing' && currentLoop) {
+    currentTimeRef.current = time;
+
+    // Only force engine seek if not scrubbing to avoid glitching, OR if using specific logic.
+    // Here we update engine on seek (click) but loop handles drag.
+    if (playbackState === 'playing' && currentLoop && !isScrubbing) {
         const engine = getAudioEngine();
         if (!engine.getAudioBuffer() && sourceAudioBuffer) engine.setAudioBuffer(sourceAudioBuffer);
         engine.playLoop(currentLoop.start, currentLoop.end, time);
@@ -187,10 +196,13 @@ const LoopStudio: React.FC = () => {
 
   const handleScrubberEnd = () => {
     setIsScrubbing(false);
+    // Use the REF value which is updated by handleSeek during drag
+    const finalTime = currentTimeRef.current;
+    
     if (currentLoop && playbackState === 'playing') {
         const engine = getAudioEngine();
         if (!engine.getAudioBuffer() && sourceAudioBuffer) engine.setAudioBuffer(sourceAudioBuffer);
-        engine.playLoop(currentLoop.start, currentLoop.end, currentTime);
+        engine.playLoop(currentLoop.start, currentLoop.end, finalTime);
     }
   };
 
@@ -199,7 +211,10 @@ const LoopStudio: React.FC = () => {
     setPlaybackState('stopped'); 
     getAudioEngine().stop();
     const loop = analysisResult?.loops.find(l => l.id === loopId);
-    if (loop) setCurrentTime(loop.start);
+    if (loop) {
+        setCurrentTime(loop.start);
+        currentTimeRef.current = loop.start;
+    }
   };
 
   const handleBuildSong = async () => {
@@ -339,7 +354,7 @@ const LoopStudio: React.FC = () => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-slate-800 pb-6">
@@ -415,7 +430,7 @@ const LoopStudio: React.FC = () => {
       {/* Main Content */}
       {analysisResult && currentLoop && (
         <>
-            {/* Left Col */}
+            {/* Left Col - Loop List */}
             <div className="lg:col-span-4 space-y-6 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
               <div className="space-y-3">
                 <h2 className="text-sm uppercase tracking-widest text-slate-500 font-semibold flex items-center gap-2">
@@ -442,103 +457,112 @@ const LoopStudio: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Col */}
-            <div className="lg:col-span-8 space-y-8">
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-6 sticky top-6">
-                 <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-lg">Loop Preview</h3>
-                    <div className="text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded flex items-center gap-2">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(currentTime)} / {formatTime(currentLoop.end)}
-                    </div>
-                 </div>
-                 <div className="relative">
-                    <Waveform 
-                        audioBuffer={sourceAudioBuffer} 
-                        loopStart={currentLoop.start} 
-                        loopEnd={currentLoop.end} 
-                        currentTime={currentTime}
-                        onSeek={handleSeek}
-                        onScrubStart={handleScrubberStart}
-                        onScrubEnd={handleScrubberEnd}
-                    />
-                     <div className="flex justify-between text-xs text-slate-500 mt-1 font-mono">
-                        <span>{formatTime(currentLoop.start)}</span>
-                        <span>{formatTime(currentLoop.end)}</span>
-                    </div>
-                 </div>
-                 <div className="flex justify-center pt-2">
-                    <Button 
-                        onClick={togglePlayback} 
-                        className="rounded-full w-16 h-16 p-0 flex items-center justify-center !text-xl bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20 transform-gpu transition-transform duration-200 hover:scale-105"
-                    >
-                        {playbackState === 'playing' ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
-                    </Button>
-                 </div>
-              </div>
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-6">
-                <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-lg">Loop Song Builder</h3>
-                </div>
-                <div className="flex flex-col md:flex-row gap-4 items-end">
-                    <div className="flex-1 w-full">
-                        <label className="block text-sm font-medium text-slate-400 mb-2">
-                            Repetitions (n)
-                        </label>
-                        <input 
-                            type="number" 
-                            min="1" 
-                            max="100" 
-                            value={repeatCount}
-                            onChange={(e) => setRepeatCount(Number(e.target.value))}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                        />
-                    </div>
-                    <Button 
-                        onClick={handleBuildSong} 
-                        isLoading={isBuildingSong}
-                        className="w-full md:w-auto"
-                        variant="secondary"
-                    >
-                        <Music className="w-4 h-4" />
-                        Generate Song
-                    </Button>
-                </div>
-
-                {generatedSongUrl && (
-                    <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-emerald-500/30">
-                        <h4 className="text-sm font-medium text-emerald-300 mb-3">Song Ready!</h4>
-                        <audio 
-                          ref={generatedAudioRef}
-                          controls 
-                          src={generatedSongUrl} 
-                          className="w-full mb-3 h-8" 
-                          onPlay={() => {
-                            setPlaybackState('paused');
-                            getAudioEngine().stop();
-                          }}
-                        />
-                        <div className="flex gap-4">
-                          <a 
-                              href={generatedSongUrl} 
-                              download={getDownloadFilename('wav')}
-                              className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 font-medium bg-slate-800 px-4 py-2 rounded-lg border border-emerald-900 hover:border-emerald-500 transition-colors"
-                          >
-                              <Download className="w-4 h-4" />
-                              Download WAV
-                          </a>
-                          {!generatedMp3Url ? (
-                             <Button onClick={handleGenerateMp3} isLoading={isGeneratingMp3} variant="ghost" className="!text-blue-400 !border-blue-900/50">
-                                <FileAudio className="w-4 h-4" /> Convert to MP3
-                             </Button>
-                          ) : (
-                            <a href={generatedMp3Url} download={getDownloadFilename('mp3')} className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 font-medium bg-slate-800 px-4 py-2 rounded-lg border border-blue-900 hover:border-blue-500 transition-colors">
-                                <FileAudio className="w-4 h-4" /> Download MP3
-                            </a>
-                          )}
+            {/* Right Col - Controls (Sticky Wrapper) */}
+            <div className="lg:col-span-8">
+              <div className="sticky top-6 space-y-8">
+                  {/* Loop Preview Box */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-6 shadow-lg">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-lg">Loop Preview</h3>
+                        <div className="text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded flex items-center gap-2">
+                            <Clock className="w-3 h-3" />
+                            {formatTime(currentTime)} / {formatTime(currentLoop.end)}
                         </div>
                     </div>
-                )}
+                    <div className="relative">
+                        <Waveform 
+                            audioBuffer={sourceAudioBuffer} 
+                            loopStart={currentLoop.start} 
+                            loopEnd={currentLoop.end} 
+                            currentTime={currentTime}
+                            onSeek={handleSeek}
+                            onScrubStart={handleScrubberStart}
+                            onScrubEnd={handleScrubberEnd}
+                        />
+                        <div className="flex justify-between text-xs text-slate-500 mt-1 font-mono">
+                            <span>{formatTime(currentLoop.start)}</span>
+                            <span>{formatTime(currentLoop.end)}</span>
+                        </div>
+                    </div>
+                    <div className="flex justify-center pt-2">
+                        <Button 
+                            onClick={togglePlayback} 
+                            className="rounded-full w-16 h-16 p-0 flex items-center justify-center !text-xl bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20 transform-gpu transition-transform duration-200 hover:scale-105"
+                        >
+                            {playbackState === 'playing' ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
+                        </Button>
+                    </div>
+                  </div>
+
+                  {/* Song Builder Box */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-6 shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-lg">Loop Song Builder</h3>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                        <div className="flex-1 w-full">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                                Repetitions (n)
+                            </label>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max="100" 
+                                value={repeatCount}
+                                onChange={(e) => setRepeatCount(Number(e.target.value))}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                            />
+                        </div>
+                        <Button 
+                            onClick={handleBuildSong} 
+                            isLoading={isBuildingSong}
+                            className="w-full md:w-auto"
+                            variant="secondary"
+                        >
+                            <Music className="w-4 h-4" />
+                            Generate Song
+                        </Button>
+                    </div>
+
+                    {generatedSongUrl && (
+                        <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-emerald-500/30">
+                            <h4 className="text-sm font-medium text-emerald-300 mb-3">Song Ready!</h4>
+                            <audio 
+                              ref={generatedAudioRef}
+                              controls 
+                              src={generatedSongUrl} 
+                              className="w-full mb-3 h-8" 
+                              onPlay={() => {
+                                setPlaybackState('paused');
+                                getAudioEngine().stop();
+                              }}
+                            />
+                            <div className="flex gap-4">
+                              <a 
+                                  href={generatedSongUrl} 
+                                  download={getDownloadFilename('wav')}
+                                  className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 font-medium bg-slate-800 px-4 py-2 rounded-lg border border-emerald-900 hover:border-emerald-500 transition-colors"
+                              >
+                                  <Download className="w-4 h-4" />
+                                  Download WAV
+                              </a>
+                              {!generatedMp3Url ? (
+                                <Button onClick={handleGenerateMp3} isLoading={isGeneratingMp3} variant="ghost" className="!text-blue-400 !border-blue-900/50">
+                                    <FileAudio className="w-4 h-4" /> Convert to MP3
+                                </Button>
+                              ) : (
+                                <Button 
+                                    onClick={() => downloadFile(generatedMp3Url!, getDownloadFilename('mp3'))}
+                                    variant="ghost" 
+                                    className="!text-blue-400 !border-blue-900/50"
+                                >
+                                    <FileAudio className="w-4 h-4" /> Download MP3
+                                </Button>
+                              )}
+                            </div>
+                        </div>
+                    )}
+                  </div>
               </div>
             </div>
         </>

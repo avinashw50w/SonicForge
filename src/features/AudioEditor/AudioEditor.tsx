@@ -89,6 +89,12 @@ const AudioEditor: React.FC = () => {
      engine.setReverse(reverse);
   }, [reverse, getAudioEngine]);
 
+  // Spatial 8D Effect
+  useEffect(() => {
+     const engine = getAudioEngine();
+     engine.setSpatial8d(spatial8d);
+  }, [spatial8d, getAudioEngine]);
+
   // --- Lifecycle Cleanup ---
   useEffect(() => {
     return () => {
@@ -106,6 +112,8 @@ const AudioEditor: React.FC = () => {
         return;
     }
     const engine = getAudioEngine();
+    
+    // Prevent updating time if we have stopped playing (but state update hasn't propagated or this frame was queued)
     if (isPlaying) {
       const t = engine.getCurrentTime();
       setCurrentTime(t);
@@ -158,12 +166,21 @@ const AudioEditor: React.FC = () => {
     }
 
     if (isPlaying) {
+      // PAUSE: Capture exact time before stopping to resume correctly later
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      
+      const pauseTime = engine.getCurrentTime();
+      currentTimeRef.current = pauseTime;
+      setCurrentTime(pauseTime);
+      
       engine.stop();
       setIsPlaying(false);
     } else {
+      // PLAY
       if (!audioBuffer) return;
       
-      let startPos = currentTimeRef.current; // Use ref for accuracy
+      let startPos = currentTimeRef.current; 
+      // Ensure start position is within current trim bounds
       if (startPos < trimStart || startPos >= trimEnd) {
           startPos = trimStart;
       }
@@ -251,7 +268,7 @@ const AudioEditor: React.FC = () => {
             setEqBass(12);     
             setEqMid(-2);      
             setEqTreble(-5);   
-            setVolume(0.85);   
+            setVolume(0.9);   
             break;
         case 'helium':
             setPitch(1.5);
