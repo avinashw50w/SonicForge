@@ -293,8 +293,7 @@ const AudioEditor: React.FC = () => {
             break;
         case 'slowed':
             setSpeed(0.85);
-            setPitch(0.85);
-            setReverb(true);
+            setPitch(1.0);
             setVolume(1.2);
             break;
         case 'bassboost':

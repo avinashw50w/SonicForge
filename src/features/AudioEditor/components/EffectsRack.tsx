@@ -3,6 +3,30 @@ import React from 'react';
 import { Zap, RotateCcw, Headphones, Wind, LucideIcon, Sparkles } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 
+interface ToggleProps {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+}
+
+const Toggle: React.FC<ToggleProps> = ({ label, active, onClick, icon: Icon }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center justify-between w-full p-3 rounded-lg border transition-all ${
+      active 
+        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
+        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+    }`}
+  >
+    <span className="flex items-center gap-2 text-sm font-medium">
+      <Icon className="w-4 h-4" />
+      {label}
+    </span>
+    <div className={`w-3 h-3 rounded-full ${active ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></div>
+  </button>
+);
+
 interface EffectsRackProps {
   reverse: boolean;
   spatial8d: boolean;
@@ -19,23 +43,6 @@ export const EffectsRack: React.FC<EffectsRackProps> = ({
   reverse, spatial8d, reverb, enhanced,
   onReverseChange, onSpatial8dChange, onReverbChange, onEnhancedChange, onReset
 }) => {
-  const Toggle = ({ label, active, onClick, icon: Icon }: { label: string; active: boolean; onClick: () => void; icon: LucideIcon }) => (
-    <button 
-      onClick={onClick}
-      className={`flex items-center justify-between w-full p-3 rounded-lg border transition-all ${
-        active 
-          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
-          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-      }`}
-    >
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="w-4 h-4" />
-        {label}
-      </span>
-      <div className={`w-3 h-3 rounded-full ${active ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></div>
-    </button>
-  );
-
   return (
     <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 md:col-span-2">
       <SectionHeader title="FX Processors" icon={Zap} onReset={onReset} />
