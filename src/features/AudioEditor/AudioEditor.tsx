@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { processAudio, getFullUrl } from '../../services/apiService';
+import { processAudio, getFullUrl, cleanupFiles } from '../../services/apiService';
 import { AudioEngine } from '../../services/audioService';
 
 // Sub-components
@@ -16,6 +16,8 @@ const AudioEditor: React.FC = () => {
   // --- State ---
   const [file, setFile] = useState<File | null>(null);
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
+  const [serverFiles, setServerFiles] = useState<{upload?: string, processed?: string}>({});
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -155,6 +157,7 @@ const AudioEditor: React.FC = () => {
       const f = e.target.files[0];
       setFile(f);
       setProcessedUrl(null);
+      setServerFiles({});
       setIsPlaying(false);
       isPlayingRef.current = false;
       setActivePreset(null);
@@ -174,6 +177,30 @@ const AudioEditor: React.FC = () => {
       setCurrentTime(0);
       currentTimeRef.current = 0;
     }
+  };
+
+  const handleClose = async () => {
+      // 1. Stop playback
+      const engine = getAudioEngine();
+      engine.stop();
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+
+      // 2. Cleanup Server Files
+      if (serverFiles.upload || serverFiles.processed) {
+          const targets = [];
+          if (serverFiles.upload) targets.push({ type: 'upload' as const, filename: serverFiles.upload });
+          if (serverFiles.processed) targets.push({ type: 'processed' as const, filename: serverFiles.processed });
+          
+          cleanupFiles(targets).catch(err => console.error("Cleanup failed", err));
+      }
+
+      // 3. Reset all state
+      setFile(null);
+      setProcessedUrl(null);
+      setServerFiles({});
+      setAudioBuffer(null);
+      resetAll();
   };
 
   const togglePlayback = async () => {
@@ -293,7 +320,7 @@ const AudioEditor: React.FC = () => {
             break;
         case 'slowed':
             setSpeed(0.85);
-            setPitch(1.0);
+            setPitch(0.95);
             setVolume(1.2);
             break;
         case 'bassboost':
@@ -353,6 +380,13 @@ const AudioEditor: React.FC = () => {
 
       const result = await processAudio(file, config);
       setProcessedUrl(getFullUrl(result.url));
+      
+      // Store filenames for cleanup
+      setServerFiles({
+          upload: result.uploadedFilename,
+          processed: result.filename
+      });
+      
     } catch (err) {
       alert("Processing failed");
     } finally {
@@ -383,7 +417,7 @@ const AudioEditor: React.FC = () => {
         <EditorHeader 
           file={file} 
           duration={duration} 
-          onClose={() => setFile(null)} 
+          onClose={handleClose} 
           onUpload={handleFileChange} 
         />
 

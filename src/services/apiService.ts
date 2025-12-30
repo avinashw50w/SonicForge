@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 const API_BASE = 'http://localhost:3001/api';
@@ -23,6 +24,10 @@ export const processMultiAudio = async (files: File[], operation: 'join' | 'mix'
   formData.append('operation', operation);
   const res = await axios.post(`${API_BASE}/process-multi`, formData);
   return res.data;
+};
+
+export const cleanupFiles = async (targets: { type: 'upload' | 'processed', filename: string }[]) => {
+  await axios.post(`${API_BASE}/cleanup`, { targets });
 };
 
 export const getFullUrl = (path: string) => `http://localhost:3001${path}`;
